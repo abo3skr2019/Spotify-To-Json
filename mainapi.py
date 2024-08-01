@@ -5,7 +5,6 @@ from spotipy.oauth2 import SpotifyOAuth
 import os
 from flask_cors import CORS
 
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +22,7 @@ sp_oauth = SpotifyOAuth(client_id=client_id,
                         client_secret=client_secret,
                         redirect_uri=REDIRECT_URI,
                         scope=SCOPE)
+
 def fetch_unavailable_tracks(sp, fetch_method, *args):
     unavailable_tracks = []
     try:
@@ -37,11 +37,23 @@ def fetch_unavailable_tracks(sp, fetch_method, *args):
         logger.error(f"Error fetching tracks: {e}")
     return unavailable_tracks
 
-@app.route('/unavailable_tracks')
-def unavailable_tracks():
+def get_token():
     token_info = session.get('token_info', None)
     if not token_info:
-        return jsonify({"redirect": REDIRECT_URI}), 401
+        return None
+
+    if sp_oauth.is_token_expired(token_info):
+        token_info = sp_oauth.refresh_access_token(token_info['refresh_token'])
+        session['token_info'] = token_info
+
+    return token_info
+
+@app.route('/unavailable_tracks')
+def unavailable_tracks():
+    token_info = get_token()
+    if not token_info:
+        print(url_for('login', _external=True))
+        return jsonify({"redirect": url_for('login', _external=True)}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
     unavailable_tracks = []
@@ -80,9 +92,10 @@ def callback():
 
 @app.route('/get_playlists')
 def get_playlists():
-    token_info = session.get('token_info', None)
+    token_info = get_token()
     if not token_info:
-        return jsonify({"redirect": REDIRECT_URI}), 401
+        print(url_for('login', _external=True))
+        return jsonify({"redirect": url_for('login', _external=True)}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
     try:
