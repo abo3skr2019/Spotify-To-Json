@@ -87,7 +87,7 @@ def callback():
 def get_playlists():
     token_info = session.get('token_info', None)
     if not token_info:
-        return redirect('/')
+        return jsonify({"redirect": "/callback"}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
     try:

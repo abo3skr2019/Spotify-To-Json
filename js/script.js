@@ -4,22 +4,23 @@ document.getElementById('fetchTracks').addEventListener('click', async () => {
             credentials: 'include'  // Include credentials (cookies) with the request
         });
 
+        const data = await response.json();
+
+        if (response.status === 401 && data.redirect) {
+            // Handle redirects by prompting the user to login
+            window.location.href = data.redirect;
+            return;
+        }
+
         if (!response.ok) {
-            if (response.redirected) {
-                // Handle redirects, e.g., by prompting the user to login
-                window.location.href = response.url;
-                return;
-            }
             throw new Error('Network response was not ok');
         }
 
-        const data = await response.json();
         displayTracks(data);
     } catch (error) {
         console.error('There was a problem with the fetch operation:', error);
     }
 });
-
 
 function displayTracks(tracks) {
     const trackList = document.getElementById('trackList');
