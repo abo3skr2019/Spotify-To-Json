@@ -19,7 +19,10 @@ client_id = os.getenv('CLIENT_ID')
 client_secret = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = 'http://localhost:5000/callback'
 SCOPE = 'playlist-read-private user-library-read'
-
+sp_oauth = SpotifyOAuth(client_id=client_id,
+                        client_secret=client_secret,
+                        redirect_uri=REDIRECT_URI,
+                        scope=SCOPE)
 def fetch_unavailable_tracks(sp, fetch_method, *args):
     unavailable_tracks = []
     try:
@@ -38,7 +41,7 @@ def fetch_unavailable_tracks(sp, fetch_method, *args):
 def unavailable_tracks():
     token_info = session.get('token_info', None)
     if not token_info:
-        return redirect('/callback')
+        return jsonify({"redirect": REDIRECT_URI}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
     unavailable_tracks = []
@@ -60,22 +63,14 @@ def unavailable_tracks():
 
 @app.route('/')
 def login():
-    sp_oauth = SpotifyOAuth(client_id=client_id,
-                            client_secret=client_secret,
-                            redirect_uri=REDIRECT_URI,
-                            scope=SCOPE)
     auth_url = sp_oauth.get_authorize_url()
     return redirect(auth_url)
 
 @app.route('/callback')
 def callback():
-    sp_oauth = SpotifyOAuth(client_id=client_id,
-                            client_secret=client_secret,
-                            redirect_uri=REDIRECT_URI,
-                            scope=SCOPE)
     code = request.args.get('code')
     try:
-        token_info = sp_oauth.get_access_token(code)
+        token_info = sp_oauth.get_cached_token(code)
         session['token_info'] = token_info
     except Exception as e:
         logger.error(f"Error during callback: {e}")
@@ -87,7 +82,7 @@ def callback():
 def get_playlists():
     token_info = session.get('token_info', None)
     if not token_info:
-        return jsonify({"redirect": "/callback"}), 401
+        return jsonify({"redirect": REDIRECT_URI}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
     try:
