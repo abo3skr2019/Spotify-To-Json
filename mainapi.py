@@ -8,6 +8,16 @@ from flask_cors import CORS
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# Create a file handler
+log_file_handler = logging.FileHandler('app.log')
+log_file_handler.setLevel(logging.INFO)
+
+# Create a logging format
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_file_handler.setFormatter(formatter)
+
+# Add the file handler to the logger
+logger.addHandler(log_file_handler)
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
@@ -23,19 +33,21 @@ sp_oauth = SpotifyOAuth(client_id=client_id,
                         redirect_uri=REDIRECT_URI,
                         scope=SCOPE)
 
-def fetch_unavailable_tracks(sp, fetch_method, *args):
-    unavailable_tracks = []
+def fetch_tracks(sp, fetch_method, availability, *args):
+    tracks = []
     try:
         results = fetch_method(*args)
         while results:
             for item in results['items']:
                 track = item['track'] if 'track' in item else item
-                if not track['is_playable']:
-                    unavailable_tracks.append(track)
+                if availability == 'unavailable' and not track['is_playable']:
+                    tracks.append(track)
+                elif availability == 'all':
+                    tracks.append(track)
             results = sp.next(results) if results['next'] else None
     except Exception as e:
         logger.error(f"Error fetching tracks: {e}")
-    return unavailable_tracks
+    return tracks
 
 def get_token():
     token_info = session.get('token_info', None)
@@ -52,26 +64,29 @@ def get_token():
 def unavailable_tracks():
     token_info = get_token()
     if not token_info:
-        print(url_for('login', _external=True))
         return jsonify({"redirect": url_for('login', _external=True)}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
-    unavailable_tracks = []
+    source = request.args.get('source', 'both')
+    availability = request.args.get('availability', 'unavailable')
+    tracks = []
 
     try:
-        playlists = sp.current_user_playlists()
-        for playlist in playlists['items']:
-            tracks = fetch_unavailable_tracks(sp, sp.playlist_tracks, playlist['id'])
-            unavailable_tracks.extend(tracks)
+        if source in ['playlist', 'both']:
+            playlists = sp.current_user_playlists()
+            for playlist in playlists['items']:
+                playlist_tracks = fetch_tracks(sp, sp.playlist_tracks, availability, playlist['id'])
+                tracks.extend(playlist_tracks)
 
-        saved_tracks = fetch_unavailable_tracks(sp, sp.current_user_saved_tracks)
-        unavailable_tracks.extend(saved_tracks)
+        if source in ['liked', 'both']:
+            saved_tracks = fetch_tracks(sp, sp.current_user_saved_tracks, availability)
+            tracks.extend(saved_tracks)
 
     except Exception as e:
-        logger.error(f"Error fetching unavailable tracks: {e}")
+        logger.error(f"Error fetching tracks: {e}")
         return jsonify({"error": "Unable to fetch tracks"}), 500
 
-    return jsonify(unavailable_tracks)
+    return jsonify(tracks)
 
 @app.route('/')
 def login():
@@ -88,23 +103,7 @@ def callback():
         logger.error(f"Error during callback: {e}")
         return redirect('/')
 
-    return redirect(url_for('get_playlists'))
-
-@app.route('/get_playlists')
-def get_playlists():
-    token_info = get_token()
-    if not token_info:
-        print(url_for('login', _external=True))
-        return jsonify({"redirect": url_for('login', _external=True)}), 401
-
-    sp = spotipy.Spotify(auth=token_info['access_token'])
-    try:
-        playlists = sp.current_user_playlists()
-    except Exception as e:
-        logger.error(f"Error fetching playlists: {e}")
-        return jsonify({"error": "Unable to fetch playlists"}), 500
-
-    return jsonify(playlists)
+    return redirect(url_for('unavailable_tracks'))
 
 if __name__ == "__main__":
     app.run(debug=True)
