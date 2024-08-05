@@ -2,3 +2,4 @@
 *nppBackup/
 .cache
 *.log
+__pycache__/*
