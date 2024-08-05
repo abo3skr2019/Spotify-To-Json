@@ -4,7 +4,9 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
 from flask_cors import CORS
+from dotenv import load_dotenv
 
+load_dotenv()
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
