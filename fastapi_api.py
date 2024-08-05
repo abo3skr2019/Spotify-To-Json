@@ -10,6 +10,7 @@ import os
 from dotenv import load_dotenv
 import csv
 import io
+import asyncio
 
 load_dotenv()
 
@@ -47,16 +48,16 @@ sp_oauth = SpotifyOAuth(client_id=client_id,
                         redirect_uri=REDIRECT_URI,
                         scope=SCOPE)
 
-def fetch_tracks(sp, fetch_method, availability, market, *args):
+async def fetch_tracks(sp, fetch_method, availability, market, *args):
     tracks = []
     try:
-        results = fetch_method(*args, market=market)
+        results = await asyncio.to_thread(fetch_method, *args, market=market)
         while results:
             for item in results['items']:
                 track = item['track'] if 'track' in item else item
                 if availability == 'all' or (availability == 'unavailable' and not track['is_playable']):
                     tracks.append(track)
-            results = sp.next(results) if results['next'] else None
+            results = await asyncio.to_thread(sp.next, results) if results['next'] else None
     except Exception as e:
         logger.error(f"Error fetching tracks: {e}")
     return tracks
@@ -101,15 +102,18 @@ async def unavailable_tracks(request: Request):
     tracks = []
 
     try:
+        tasks = []
         if source in ['playlist', 'both']:
-            playlists = sp.current_user_playlists()
+            playlists = await asyncio.to_thread(sp.current_user_playlists)
             for playlist in playlists['items']:
-                playlist_tracks = fetch_tracks(sp, sp.playlist_tracks, availability, market, playlist['id'])
-                tracks.extend(playlist_tracks)
+                tasks.append(fetch_tracks(sp, sp.playlist_tracks, availability, market, playlist['id']))
 
         if source in ['liked', 'both']:
-            saved_tracks = fetch_tracks(sp, sp.current_user_saved_tracks, availability, market)
-            tracks.extend(saved_tracks)
+            tasks.append(fetch_tracks(sp, sp.current_user_saved_tracks, availability, market))
+
+        results = await asyncio.gather(*tasks)
+        for result in results:
+            tracks.extend(result)
 
     except Exception as e:
         logger.error(f"Error fetching tracks: {e}")
@@ -142,6 +146,7 @@ async def callback(request: Request):
 
     next_url = request.session.get('next_url', '/unavailable_tracks')
     return RedirectResponse(next_url)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('PORT', 5000)))

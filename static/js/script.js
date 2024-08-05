@@ -61,10 +61,17 @@ function displayTracks(tracks) {
 }
 
 function createDownloadButton(data) {
+    const downloadButtonContainer = document.getElementById('downloadButtonContainer');
+    downloadButtonContainer.innerHTML = ''; // Clear any existing button
+
     const downloadButton = document.createElement('button');
-    downloadButton.textContent = 'Download Data';
-    downloadButton.addEventListener('click', () => downloadDataAsCSV(data));
-    document.body.appendChild(downloadButton);
+    downloadButton.id = 'downloadButton';
+    downloadButton.textContent = 'Download Playlist CSV';
+    downloadButton.addEventListener('click', (event) => {
+        event.preventDefault(); // Prevent the default form submission behavior
+        downloadDataAsCSV(data);
+    });
+    downloadButtonContainer.appendChild(downloadButton);
 }
 
 function downloadDataAsCSV(data) {
