@@ -1,10 +1,12 @@
 import logging
-from flask import Flask, request, redirect, session, url_for, jsonify,render_template
+from flask import Flask, request, redirect, session, url_for, jsonify, render_template, send_file
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
 from flask_cors import CORS
 from dotenv import load_dotenv
+import csv
+import io
 
 load_dotenv()
 # Set up logging
@@ -35,16 +37,14 @@ sp_oauth = SpotifyOAuth(client_id=client_id,
                         redirect_uri=REDIRECT_URI,
                         scope=SCOPE)
 
-def fetch_tracks(sp, fetch_method, availability, *args):
+def fetch_tracks(sp, fetch_method, availability, market, *args):
     tracks = []
     try:
-        results = fetch_method(*args)
+        results = fetch_method(*args, market=market)
         while results:
             for item in results['items']:
                 track = item['track'] if 'track' in item else item
-                if availability == 'unavailable' and not track['is_playable']:
-                    tracks.append(track)
-                elif availability == 'all':
+                if availability == 'all' or (availability == 'unavailable' and not track['is_playable']):
                     tracks.append(track)
             results = sp.next(results) if results['next'] else None
     except Exception as e:
@@ -73,26 +73,51 @@ def unavailable_tracks():
         return jsonify({"redirect": url_for('login', _external=True)}), 401
 
     sp = spotipy.Spotify(auth=token_info['access_token'])
-    source = request.args.get('source', 'both')
+    source = request.args.get('source', 'liked')
     availability = request.args.get('availability', 'unavailable')
+    market = request.args.get('market', 'SA')  # Default market to 'US' if not provided
     tracks = []
 
     try:
         if source in ['playlist', 'both']:
             playlists = sp.current_user_playlists()
             for playlist in playlists['items']:
-                playlist_tracks = fetch_tracks(sp, sp.playlist_tracks, availability, playlist['id'])
+                playlist_tracks = fetch_tracks(sp, sp.playlist_tracks, availability, market, playlist['id'])
                 tracks.extend(playlist_tracks)
 
         if source in ['liked', 'both']:
-            saved_tracks = fetch_tracks(sp, sp.current_user_saved_tracks, availability)
+            saved_tracks = fetch_tracks(sp, sp.current_user_saved_tracks, availability, market)
             tracks.extend(saved_tracks)
 
     except Exception as e:
         logger.error(f"Error fetching tracks: {e}")
         return jsonify({"error": "Unable to fetch tracks"}), 500
 
-    return jsonify(tracks)
+    # Write tracks to CSV in memory
+    try:
+        logger.info("Starting to write tracks to CSV")
+        csv_file = io.StringIO()
+        writer = csv.writer(csv_file)
+        writer.writerow(['Artist', 'Title', 'Album', 'Length'])
+        for track in tracks:
+            artist_names = ', '.join([artist['name'] for artist in track['artists']])
+            title = track['name']
+            album = track['album']['name']
+            length = track['duration_ms'] // 1000  # Convert milliseconds to seconds
+            writer.writerow([artist_names, title, album, length])
+        
+        csv_file.seek(0)
+        logger.info("Finished writing tracks to CSV")
+
+    except Exception as e:
+        logger.error(f"Error writing tracks to CSV: {e}")
+        return jsonify({"error": "Unable to fetch tracks"}), 500
+
+    try:
+        return send_file(io.BytesIO(csv_file.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='unavailable_tracks.csv')
+    except Exception as e:
+        logger.error(f"Error sending file: {e}")
+        return jsonify({"error": "Unable to send file"}), 500
 
 @app.route('/')
 def login():
@@ -103,7 +128,7 @@ def login():
 def callback():
     code = request.args.get('code')
     try:
-        token_info = sp_oauth.get_cached_token(code)
+        token_info = sp_oauth.get_access_token(code)
         session['token_info'] = token_info
     except Exception as e:
         logger.error(f"Error during callback: {e}")
