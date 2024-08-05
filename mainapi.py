@@ -26,7 +26,7 @@ app.config['SESSION_COOKIE_NAME'] = 'Spotify Login Session'
 
 client_id = os.getenv('CLIENT_ID')
 client_secret = os.getenv('CLIENT_SECRET')
-REDIRECT_URI = 'http://localhost:5000/callback'
+REDIRECT_URI = os.getenv('REDIRECT_URI')
 SCOPE = 'playlist-read-private user-library-read'
 sp_oauth = SpotifyOAuth(client_id=client_id,
                         client_secret=client_secret,
