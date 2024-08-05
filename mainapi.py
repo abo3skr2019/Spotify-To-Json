@@ -64,7 +64,7 @@ def get_token():
 
 @app.route('/index')
 def index():
-    return render_template(os.path.join(app.root_path, 'index.html'))
+    return render_template(os.path.join('index.html'))
 
 @app.route('/unavailable_tracks')
 def unavailable_tracks():
