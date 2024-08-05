@@ -10,8 +10,11 @@ document.getElementById('fetchTracks').addEventListener('click', async () => {
 
     console.log('Query Parameters:', queryParams.toString()); // Log query parameters
 
+    const url = new URL('/unavailable_tracks', window.location.origin);
+    url.search = queryParams.toString();
+
     try {
-        const response = await fetch(`http://127.0.0.1:5000/unavailable_tracks?${queryParams.toString()}`, {
+        const response = await fetch(url.toString(), {
             credentials: 'include'  // Include credentials (cookies) with the request
         });
 
@@ -19,7 +22,7 @@ document.getElementById('fetchTracks').addEventListener('click', async () => {
 
         if (response.status === 401 && data.redirect) {
             // Append the next parameter to the redirect URL
-            const redirectUrl = new URL(data.redirect);
+            const redirectUrl = new URL(data.redirect, window.location.origin);
             redirectUrl.searchParams.set('next', currentUrl);
             window.location.href = redirectUrl.toString();
             return;
@@ -60,15 +63,29 @@ function displayTracks(tracks) {
 function createDownloadButton(data) {
     const downloadButton = document.createElement('button');
     downloadButton.textContent = 'Download Data';
-    downloadButton.addEventListener('click', () => downloadData(data));
+    downloadButton.addEventListener('click', () => downloadDataAsCSV(data));
     document.body.appendChild(downloadButton);
 }
 
-function downloadData(data) {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
+function downloadDataAsCSV(data) {
+    const csvRows = [];
+    const headers = ['Artist', 'Title', 'Album', 'Length'];
+    csvRows.push(headers.join(','));
+
+    data.forEach(track => {
+        const artistNames = track.artists.map(artist => artist.name).join(', ');
+        const title = track.name;
+        const album = track.album.name;
+        const length = track.duration_ms / 1000;
+        const row = [artistNames, title, album, length];
+        csvRows.push(row.join(','));
+    });
+
+    const csvString = csvRows.join('\n');
+    const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csvString);
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "unavailable_tracks.json");
+    downloadAnchorNode.setAttribute("download", "unavailable_tracks.csv");
     document.body.appendChild(downloadAnchorNode); // required for firefox
     downloadAnchorNode.click();
     downloadAnchorNode.remove();

@@ -1,9 +1,9 @@
-# mainapi_fastapi.py
-
 import logging
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from fastapi.staticfiles import StaticFiles
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth
 import os
@@ -31,6 +31,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add SessionMiddleware
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('SECRET_KEY', 'your-secret-key'))
+
+# Mount the static directory to serve static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 client_id = os.getenv('CLIENT_ID')
 client_secret = os.getenv('CLIENT_SECRET')
@@ -76,7 +82,7 @@ def get_token(session: dict):
 
 @app.get("/index")
 async def index():
-    return {"message": "Welcome to the FastAPI Spotify API"}
+    return RedirectResponse(url="/static/html/index.html")
 
 @app.get("/unavailable_tracks")
 async def unavailable_tracks(request: Request):
@@ -110,32 +116,16 @@ async def unavailable_tracks(request: Request):
         return JSONResponse({"error": "Unable to fetch tracks"}, status_code=500)
 
     try:
-        logger.info("Starting to write tracks to CSV")
-        csv_file = io.StringIO()
-        writer = csv.writer(csv_file)
-        writer.writerow(['Artist', 'Title', 'Album', 'Length'])
-        for track in tracks:
-            artist_names = ', '.join([artist['name'] for artist in track['artists']])
-            title = track['name']
-            album = track['album']['name']
-            length = track['duration_ms'] // 1000
-            writer.writerow([artist_names, title, album, length])
-        
-        csv_file.seek(0)
-        logger.info("Finished writing tracks to CSV")
-
+        logger.info("Returning tracks as JSON")
+        return JSONResponse(tracks)
     except Exception as e:
-        logger.error(f"Error writing tracks to CSV: {e}")
-        return JSONResponse({"error": "Unable to fetch tracks"}, status_code=500)
+        logger.error(f"Error sending JSON response: {e}")
+        return JSONResponse({"error": "Unable to send JSON response"}, status_code=500)
 
-    try:
-        return StreamingResponse(io.BytesIO(csv_file.getvalue().encode()), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=unavailable_tracks.csv"})
-    except Exception as e:
-        logger.error(f"Error sending file: {e}")
-        return JSONResponse({"error": "Unable to send file"}, status_code=500)
-
-@app.get("/")
-async def login():
+@app.get("/login")
+async def login(request: Request):
+    next_url = request.query_params.get('next', '/')
+    request.session['next_url'] = next_url
     auth_url = sp_oauth.get_authorize_url()
     return RedirectResponse(auth_url)
 
@@ -145,12 +135,13 @@ async def callback(request: Request):
     try:
         token_info = sp_oauth.get_access_token(code)
         request.session['token_info'] = token_info
+        logger.info(f"Token info stored in session: {token_info}")
     except Exception as e:
         logger.error(f"Error during callback: {e}")
         return RedirectResponse('/')
 
-    return RedirectResponse('/unavailable_tracks')
-
+    next_url = request.session.get('next_url', '/unavailable_tracks')
+    return RedirectResponse(next_url)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('PORT', 5000)))
