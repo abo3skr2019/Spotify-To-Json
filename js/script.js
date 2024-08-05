@@ -1,14 +1,25 @@
 document.getElementById('fetchTracks').addEventListener('click', async () => {
+    const source = document.getElementById('source').value;
+    const availability = document.getElementById('availability').value;
+    const currentUrl = window.location.href;
+
+    const queryParams = new URLSearchParams({
+        source: source,
+        availability: availability
+    });
+
     try {
-        const response = await fetch('http://127.0.0.1:5000/unavailable_tracks', {
+        const response = await fetch(`http://127.0.0.1:5000/unavailable_tracks?${queryParams.toString()}`, {
             credentials: 'include'  // Include credentials (cookies) with the request
         });
 
         const data = await response.json();
 
         if (response.status === 401 && data.redirect) {
-            // Handle redirects by prompting the user to login
-            window.location.href = data.redirect;
+            // Append the next parameter to the redirect URL
+            const redirectUrl = new URL(data.redirect);
+            redirectUrl.searchParams.set('next', currentUrl);
+            window.location.href = redirectUrl.toString();
             return;
         }
 
@@ -17,6 +28,7 @@ document.getElementById('fetchTracks').addEventListener('click', async () => {
         }
 
         displayTracks(data);
+        createDownloadButton(data);
     } catch (error) {
         console.error('There was a problem with the fetch operation:', error);
     }
@@ -41,4 +53,21 @@ function displayTracks(tracks) {
         `;
         trackList.appendChild(trackElement);
     });
+}
+
+function createDownloadButton(data) {
+    const downloadButton = document.createElement('button');
+    downloadButton.textContent = 'Download Data';
+    downloadButton.addEventListener('click', () => downloadData(data));
+    document.body.appendChild(downloadButton);
+}
+
+function downloadData(data) {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "unavailable_tracks.json");
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
 }

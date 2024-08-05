@@ -11,7 +11,22 @@
         <h1>Spotify Unavailable Tracks</h1>
     </header>
     <main>
-        <button id="fetchTracks">Fetch Unavailable Tracks</button>
+        <form id="trackForm">
+            <label for="source">Source:</label>
+            <select id="source" name="source">
+                <option value="playlist">Playlists</option>
+                <option value="liked">Liked Songs</option>
+                <option value="both">Both</option>
+            </select>
+            <br>
+            <label for="availability">Availability:</label>
+            <select id="availability" name="availability">
+                <option value="unavailable">Unavailable</option>
+                <option value="all">All</option>
+            </select>
+            <br>
+            <button type="button" id="fetchTracks">Fetch Tracks</button>
+        </form>
         <div id="trackList"></div>
     </main>
     <footer>
