@@ -27,6 +27,7 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 app.secret_key = os.getenv('SECRET_KEY')
 app.config['SESSION_COOKIE_NAME'] = 'Spotify Login Session'
+app.config['SESSION_COOKIE_HTTPONLY'] = False  # Allow JavaScript to access the cookie
 
 client_id = os.getenv('CLIENT_ID')
 client_secret = os.getenv('CLIENT_SECRET')
@@ -52,13 +53,21 @@ def fetch_tracks(sp, fetch_method, availability, market, *args):
     return tracks
 
 def get_token():
+    logger.info(f"Getting token from session {session.get('token_info')}")
     token_info = session.get('token_info', None)
     if not token_info:
+        logger.info("No token_info found in session")
         return None
 
     if sp_oauth.is_token_expired(token_info):
-        token_info = sp_oauth.refresh_access_token(token_info['refresh_token'])
-        session['token_info'] = token_info
+        logger.info("Token expired, refreshing token")
+        try:
+            token_info = sp_oauth.refresh_access_token(token_info['refresh_token'])
+            session['token_info'] = token_info
+            logger.info("Token refreshed successfully")
+        except Exception as e:
+            logger.error(f"Error refreshing token: {e}")
+            return None
 
     return token_info
 
@@ -76,6 +85,9 @@ def unavailable_tracks():
     source = request.args.get('source', 'liked')
     availability = request.args.get('availability', 'unavailable')
     market = request.args.get('market', 'SA')  # Default market to 'US' if not provided
+
+    logger.info(f"Received query parameters - Source: {source}, Availability: {availability}, Market: {market}")
+
     tracks = []
 
     try:
@@ -118,15 +130,19 @@ def unavailable_tracks():
     except Exception as e:
         logger.error(f"Error sending file: {e}")
         return jsonify({"error": "Unable to send file"}), 500
-
+            
 @app.route('/')
 def login():
+    next_url = request.args.get('next')
     auth_url = sp_oauth.get_authorize_url()
+    if next_url:
+        auth_url += f"&next={next_url}"
     return redirect(auth_url)
 
 @app.route('/callback')
 def callback():
     code = request.args.get('code')
+    next_url = request.args.get('next')
     try:
         token_info = sp_oauth.get_access_token(code)
         session['token_info'] = token_info
@@ -134,6 +150,8 @@ def callback():
         logger.error(f"Error during callback: {e}")
         return redirect('/')
 
+    if next_url:
+        return redirect(next_url)
     return redirect(url_for('unavailable_tracks'))
 
 if __name__ == "__main__":

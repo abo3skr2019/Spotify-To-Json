@@ -8,6 +8,8 @@ document.getElementById('fetchTracks').addEventListener('click', async () => {
         availability: availability
     });
 
+    console.log('Query Parameters:', queryParams.toString()); // Log query parameters
+
     try {
         const response = await fetch(`http://127.0.0.1:5000/unavailable_tracks?${queryParams.toString()}`, {
             credentials: 'include'  // Include credentials (cookies) with the request
