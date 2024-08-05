@@ -1,5 +1,5 @@
 import logging
-from flask import Flask, request, redirect, session, url_for, jsonify
+from flask import Flask, request, redirect, session, url_for, jsonify,render_template
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
@@ -61,6 +61,10 @@ def get_token():
         session['token_info'] = token_info
 
     return token_info
+
+@app.route('/index')
+def index():
+    return render_template(os.path.join(app.root_path, 'index.html'))
 
 @app.route('/unavailable_tracks')
 def unavailable_tracks():
